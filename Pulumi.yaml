@@ -1,0 +1,8 @@
+name: paperless
+description: Kubernetes-based deployment of paperless-ng
+pulumi:disable-default-providers:
+  - kubernetes
+runtime:
+  name: python
+  options:
+    virtualenv: .venv

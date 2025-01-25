@@ -1,0 +1,115 @@
+[project]
+name = "paperless"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "pulumi>=3.147.0",
+    "pulumi-kubernetes>=4.21.0",
+    "pydantic>=2.10.1",
+]
+
+[dependency-groups]
+dev=[
+    "ruff>=0.9.1",
+    "pyright>=1.1.368",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+extend-select = [
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "ERA",    # eradicate (commented out code)
+    "G",      # flake8-logging-format
+    "I",      # isort
+    "ISC",    # flake8-implicit-string-concat
+    "PL",     # Pylint
+    "RET",    # flake8-return
+    "RUF100", # unused noqa
+    "SLF",    # flake8-self
+]
+ignore = [
+    "ISC001",  # single line string concat  # disabled per hint from ruff reg. conflict with formatter
+    "PLR0912", # too many branches
+    "PLR0913", # too many arguments
+    "PLR0915", # too many statements
+    "PLR2004", # magic value used in comparison  # we do this if value is just used once
+    "PLR1711", # useless return  # we return None explicitly
+]
+
+[tool.ruff.lint.isort]
+lines-between-types = 1
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.pyright]
+useLibraryCodeForTypes = true
+include = ["src", "scripts"]
+exclude = ["**/node_modules", "**/__pycache__"]
+deprecateTypingAliases = true
+reportAssertAlwaysTrue = true
+reportCallInDefaultInitializer = true
+reportConstantRedefinition = true
+reportDeprecated = true
+reportDuplicateImport = true
+reportImplicitOverride = true
+reportImplicitStringConcatenation = false       # we do this to split strings due to line length
+reportImportCycles = false                      # we do have cycles for type checking only
+reportIncompleteStub = true
+reportInconsistentConstructor = true
+reportInvalidStringEscapeSequence = true
+reportInvalidStubStatement = true
+reportInvalidTypeVarUse = true
+reportMatchNotExhaustive = true
+# reportMissingSuperCall = true  # broken, false positives
+reportPrivateUsage = true
+reportPropertyTypeMismatch = true
+reportSelfClsParameterName = true
+reportShadowedImports = true
+reportTypeCommentUsage = true
+reportUnnecessaryCast = true
+reportUnnecessaryComparison = true
+reportUnnecessaryContains = true
+reportUnnecessaryIsInstance = true
+reportUnnecessaryTypeIgnoreComment = true
+reportUnsupportedDunderAll = true
+reportUnusedImport = true
+reportUnusedVariable = true
+reportWildcardImportFromLibrary = true
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
+
+# Regexes for lines to exclude from consideration
+exclude_lines = [
+    # have to re-enable the standard pragma:
+    "pragma: no cover",
+
+    # tests don't hit defensive assertion code:
+    "raise NotImplementedError",
+
+    # "..." null statement (as used in protocols) does not require coverage:
+    "\\.\\.\\.",
+
+    # non-runnable code isn't run during tests:
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if .*TYPE_CHECKING:",
+
+    # do not measure coverage in platform dependent switches:
+    "sys.platform == '",
+    "sys.platform in",
+]
