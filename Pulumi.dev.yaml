@@ -1,2 +1,6 @@
 config:
-  paperless:config: {}
+  paperless:config:
+    service:
+      domain-name: paperless.dev.mpagel.de
+    paperless: {}
+    unify: {}
