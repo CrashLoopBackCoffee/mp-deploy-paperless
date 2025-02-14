@@ -1,11 +1,7 @@
 """Paperless ng."""
 
-import os
-
 import pulumi as p
 import pulumi_kubernetes as k8s
-
-from mp.deploy_utils import unify
 
 from paperless.model import ComponentConfig
 
@@ -80,7 +76,7 @@ deployment = k8s.apps.v1.Deployment(
     'nginx',
     metadata={'name': 'nginx'},
     spec={
-        'replicas': 2,
+        'replicas': 1,
         'selector': {
             'match_labels': labels,
         },
@@ -95,36 +91,40 @@ deployment = k8s.apps.v1.Deployment(
                         'name': 'nginx',
                         'ports': [
                             {
-                                'container_port': 443,
-                            }
-                        ],
-                        'volume_mounts': [
-                            {
-                                'name': 'nginx-config',
-                                'mount_path': '/etc/nginx/nginx.conf',
-                                'sub_path': 'nginx.conf',
+                                'name': 'http',
+                                'container_port': 80,
                             },
-                            {
-                                'name': 'nginx-tls',
-                                'mount_path': '/etc/nginx/ssl',
-                            },
+                            # {
+                            #     'container_port': 443,
+                            # },
                         ],
+                        # 'volume_mounts': [
+                        #     {
+                        #         'name': 'nginx-config',
+                        #         'mount_path': '/etc/nginx/nginx.conf',
+                        #         'sub_path': 'nginx.conf',
+                        #     },
+                        #     {
+                        #         'name': 'nginx-tls',
+                        #         'mount_path': '/etc/nginx/ssl',
+                        #     },
+                        # ],
                     }
                 ],
-                'volumes': [
-                    {
-                        'name': 'nginx-config',
-                        'config_map': {
-                            'name': nginx_config.metadata.name,
-                        },
-                    },
-                    {
-                        'name': 'nginx-tls',
-                        'secret': {
-                            'secret_name': certificate.spec['secretName'],  # pyright: ignore[reportAttributeAccessIssue]  # custom resource attribute unknown
-                        },
-                    },
-                ],
+                # 'volumes': [
+                #     {
+                #         'name': 'nginx-config',
+                #         'config_map': {
+                #             'name': nginx_config.metadata.name,
+                #         },
+                #     },
+                #     {
+                #         'name': 'nginx-tls',
+                #         'secret': {
+                #             'secret_name': certificate.spec['secretName'],  # pyright: ignore[reportAttributeAccessIssue]  # custom resource attribute unknown
+                #         },
+                #     },
+                # ],
             },
         },
     },
@@ -139,28 +139,89 @@ service = k8s.core.v1.Service(
     spec={
         'selector': deployment.spec.selector.match_labels,
         'ports': [
+            # {
+            #     'name': 'https',
+            #     'port': 443,
+            #     'target_port': 443,
+            # },
             {
-                'port': 443,
-                'target_port': 443,
+                'name': 'http',
+                'port': 80,
+                'target_port': 'http',
             },
         ],
-        'type': 'LoadBalancer',
-        'external_traffic_policy': 'Local',
+        # 'type': 'LoadBalancer',
     },
     opts=k8s_opts,
 )
-ipv4 = service.status.load_balancer.ingress[0].ip
-p.export('ipv4', ipv4)
 
-dns_provider = unify.UnifyDnsRecordProvider(
-    base_url=str(component_config.unify.url),
-    api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
-    verify_ssl=component_config.unify.verify_ssl,
+# ingress = k8s.networking.v1.Ingress(
+#     'ingress',
+#     metadata={'name': 'ingress'},
+#     spec={
+#         'rules': [
+#             {
+#                 'http': {
+#                     'paths': [
+#                         {
+#                             'path': '/',
+#                             'path_type': 'Prefix',
+#                             'backend': {
+#                                 'service': {
+#                                     'name': service.metadata.name,
+#                                     'port': {
+#                                         'name': 'http',
+#                                     },
+#                                 }
+#                             },
+#                         }
+#                     ]
+#                 }
+#             }
+#         ]
+#     },
+#     opts=k8s_opts,
+# )
+
+ingress = k8s.apiextensions.CustomResource(
+    'ingress',
+    api_version='traefik.io/v1alpha1',
+    kind='IngressRoute',
+    metadata={
+        'name': 'ingress',
+    },
+    spec={
+        'entryPoints': ['websecure'],
+        'routes': [
+            {
+                'match': 'HostRegexp(`.*`)',
+                'kind': 'Rule',
+                'services': [
+                    {
+                        'name': service.metadata.name,
+                        'namespace': service.metadata.namespace,
+                        'port': 'http',
+                    },
+                ],
+            }
+        ],
+    },
+    opts=k8s_opts,
 )
 
-unify.UnifyDnsRecord(
-    'dns',
-    domain_name=component_config.service.domain_name,
-    ipv4=ipv4,
-    provider=dns_provider,
-)
+
+# ipv4 = service.status.load_balancer.ingress[0].ip
+# p.export('ipv4', ipv4)
+
+# dns_provider = unify.UnifyDnsRecordProvider(
+#     base_url=str(component_config.unify.url),
+#     api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
+#     verify_ssl=component_config.unify.verify_ssl,
+# )
+
+# unify.UnifyDnsRecord(
+#     'dns',
+#     domain_name=component_config.service.domain_name,
+#     ipv4=ipv4,
+#     provider=dns_provider,
+# )
