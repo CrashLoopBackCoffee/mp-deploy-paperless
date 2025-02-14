@@ -1,7 +1,11 @@
 """Paperless ng."""
 
+import os
+
 import pulumi as p
 import pulumi_kubernetes as k8s
+
+from mp.deploy_utils import unify
 
 from paperless.model import ComponentConfig
 
@@ -194,7 +198,7 @@ ingress = k8s.apiextensions.CustomResource(
         'entryPoints': ['websecure'],
         'routes': [
             {
-                'match': 'HostRegexp(`.*`)',
+                'match': f'Host(`{component_config.service.domain_name}`)',
                 'kind': 'Rule',
                 'services': [
                     {
@@ -205,23 +209,25 @@ ingress = k8s.apiextensions.CustomResource(
                 ],
             }
         ],
+        'tls': {'secretName': certificate.spec['secretName']},  # pyright: ignore[reportAttributeAccessIssue]
     },
     opts=k8s_opts,
 )
 
-
 # ipv4 = service.status.load_balancer.ingress[0].ip
+# TODO take from kubernetes or even set up whitelist dns entry right there:
+ipv4 = '10.0.10.116'
 # p.export('ipv4', ipv4)
 
-# dns_provider = unify.UnifyDnsRecordProvider(
-#     base_url=str(component_config.unify.url),
-#     api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
-#     verify_ssl=component_config.unify.verify_ssl,
-# )
+dns_provider = unify.UnifyDnsRecordProvider(
+    base_url=str(component_config.unify.url),
+    api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
+    verify_ssl=component_config.unify.verify_ssl,
+)
 
-# unify.UnifyDnsRecord(
-#     'dns',
-#     domain_name=component_config.service.domain_name,
-#     ipv4=ipv4,
-#     provider=dns_provider,
-# )
+unify.UnifyDnsRecord(
+    'dns',
+    domain_name=component_config.service.domain_name,
+    ipv4=ipv4,
+    provider=dns_provider,
+)
