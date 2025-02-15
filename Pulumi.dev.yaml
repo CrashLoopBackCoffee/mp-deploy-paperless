@@ -3,4 +3,3 @@ config:
     service:
       domain-name: paperless.dev.mpagel.de
     paperless: {}
-    unify: {}

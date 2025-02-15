@@ -49,29 +49,6 @@ nginx_config = k8s.core.v1.ConfigMap(
     opts=k8s_opts,
 )
 
-# certificate = k8s.apiextensions.CustomResource(
-#     'certificate',
-#     api_version='cert-manager.io/v1',
-#     kind='Certificate',
-#     metadata={
-#         'name': 'certificate',
-#         'annotations': {
-#             # wait for certificate to be issued before starting deployment (and hence application
-#             # containers):
-#             'pulumi.com/waitFor': 'condition=Ready',
-#         },
-#     },
-#     spec={
-#         'secretName': 'certificate',
-#         'dnsNames': ['*.dev.mpagel.de'],
-#         'issuerRef': {
-#             'kind': 'ClusterIssuer',
-#             'name': 'lets-encrypt',
-#         },
-#     },
-#     opts=k8s_opts,
-# )
-
 deployment = k8s.apps.v1.Deployment(
     'nginx',
     metadata={'name': 'nginx'},
@@ -94,37 +71,9 @@ deployment = k8s.apps.v1.Deployment(
                                 'name': 'http',
                                 'container_port': 80,
                             },
-                            # {
-                            #     'container_port': 443,
-                            # },
                         ],
-                        # 'volume_mounts': [
-                        #     {
-                        #         'name': 'nginx-config',
-                        #         'mount_path': '/etc/nginx/nginx.conf',
-                        #         'sub_path': 'nginx.conf',
-                        #     },
-                        #     {
-                        #         'name': 'nginx-tls',
-                        #         'mount_path': '/etc/nginx/ssl',
-                        #     },
-                        # ],
                     }
                 ],
-                # 'volumes': [
-                #     {
-                #         'name': 'nginx-config',
-                #         'config_map': {
-                #             'name': nginx_config.metadata.name,
-                #         },
-                #     },
-                #     {
-                #         'name': 'nginx-tls',
-                #         'secret': {
-                #             'secret_name': certificate.spec['secretName'],  # pyright: ignore[reportAttributeAccessIssue]  # custom resource attribute unknown
-                #         },
-                #     },
-                # ],
             },
         },
     },
@@ -139,52 +88,18 @@ service = k8s.core.v1.Service(
     spec={
         'selector': deployment.spec.selector.match_labels,
         'ports': [
-            # {
-            #     'name': 'https',
-            #     'port': 443,
-            #     'target_port': 443,
-            # },
             {
                 'name': 'http',
                 'port': 80,
                 'target_port': 'http',
             },
         ],
-        # 'type': 'LoadBalancer',
     },
     opts=k8s_opts,
 )
 
-# ingress = k8s.networking.v1.Ingress(
-#     'ingress',
-#     metadata={'name': 'ingress'},
-#     spec={
-#         'rules': [
-#             {
-#                 'http': {
-#                     'paths': [
-#                         {
-#                             'path': '/',
-#                             'path_type': 'Prefix',
-#                             'backend': {
-#                                 'service': {
-#                                     'name': service.metadata.name,
-#                                     'port': {
-#                                         'name': 'http',
-#                                     },
-#                                 }
-#                             },
-#                         }
-#                     ]
-#                 }
-#             }
-#         ]
-#     },
-#     opts=k8s_opts,
-# )
-
-sub_domain = k8s_stack.get_output('app-sub-domain')
-app_name = p.get_project()
+fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
+p.export('fqdn', fqdn)
 
 ingress = k8s.apiextensions.CustomResource(
     'ingress',
@@ -199,7 +114,7 @@ ingress = k8s.apiextensions.CustomResource(
             {
                 'kind': 'Rule',
                 # assembly match for hostname <app>.<subdomain>:
-                'match': p.Output.concat('Host(`', app_name, '.', sub_domain, '`)'),
+                'match': p.Output.concat('Host(`', fqdn, '`)'),
                 'services': [
                     {
                         'name': service.metadata.name,
@@ -214,21 +129,3 @@ ingress = k8s.apiextensions.CustomResource(
     },
     opts=k8s_opts,
 )
-
-# ipv4 = service.status.load_balancer.ingress[0].ip
-# TODO take from kubernetes or even set up whitelist dns entry right there:
-# ipv4 = '10.0.10.116'
-# p.export('ipv4', ipv4)
-
-# dns_provider = unify.UnifyDnsRecordProvider(
-#     base_url=str(component_config.unify.url),
-#     api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
-#     verify_ssl=component_config.unify.verify_ssl,
-# )
-
-# unify.UnifyDnsRecord(
-#     'dns',
-#     domain_name='*.dev.mpagel.de',
-#     ipv4=ipv4,
-#     provider=dns_provider,
-# )

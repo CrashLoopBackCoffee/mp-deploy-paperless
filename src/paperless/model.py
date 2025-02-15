@@ -23,11 +23,6 @@ class EnvVarRef(ConfigBaseModel):
         return p.Output.secret(os.environ[self.envvar])
 
 
-class UnifyConfig(ConfigBaseModel):
-    url: pydantic.HttpUrl = pydantic.HttpUrl('https://unifi/')
-    verify_ssl: bool = False
-
-
 class PaperlessConfig(ConfigBaseModel):
     pass
 
@@ -39,4 +34,3 @@ class ServiceConfig(ConfigBaseModel):
 class ComponentConfig(ConfigBaseModel):
     service: ServiceConfig
     paperless: PaperlessConfig
-    unify: UnifyConfig
