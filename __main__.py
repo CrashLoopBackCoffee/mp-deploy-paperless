@@ -1,11 +1,7 @@
 """Paperless ng."""
 
-import os
-
 import pulumi as p
 import pulumi_kubernetes as k8s
-
-from mp.deploy_utils import unify
 
 from paperless.model import ComponentConfig
 
@@ -53,28 +49,28 @@ nginx_config = k8s.core.v1.ConfigMap(
     opts=k8s_opts,
 )
 
-certificate = k8s.apiextensions.CustomResource(
-    'certificate',
-    api_version='cert-manager.io/v1',
-    kind='Certificate',
-    metadata={
-        'name': 'certificate',
-        'annotations': {
-            # wait for certificate to be issued before starting deployment (and hence application
-            # containers):
-            'pulumi.com/waitFor': 'condition=Ready',
-        },
-    },
-    spec={
-        'secretName': 'certificate',
-        'dnsNames': [component_config.service.domain_name],
-        'issuerRef': {
-            'kind': 'ClusterIssuer',
-            'name': 'lets-encrypt',
-        },
-    },
-    opts=k8s_opts,
-)
+# certificate = k8s.apiextensions.CustomResource(
+#     'certificate',
+#     api_version='cert-manager.io/v1',
+#     kind='Certificate',
+#     metadata={
+#         'name': 'certificate',
+#         'annotations': {
+#             # wait for certificate to be issued before starting deployment (and hence application
+#             # containers):
+#             'pulumi.com/waitFor': 'condition=Ready',
+#         },
+#     },
+#     spec={
+#         'secretName': 'certificate',
+#         'dnsNames': ['*.dev.mpagel.de'],
+#         'issuerRef': {
+#             'kind': 'ClusterIssuer',
+#             'name': 'lets-encrypt',
+#         },
+#     },
+#     opts=k8s_opts,
+# )
 
 deployment = k8s.apps.v1.Deployment(
     'nginx',
@@ -187,6 +183,9 @@ service = k8s.core.v1.Service(
 #     opts=k8s_opts,
 # )
 
+sub_domain = k8s_stack.get_output('app-sub-domain')
+app_name = p.get_project()
+
 ingress = k8s.apiextensions.CustomResource(
     'ingress',
     api_version='traefik.io/v1alpha1',
@@ -198,8 +197,9 @@ ingress = k8s.apiextensions.CustomResource(
         'entryPoints': ['websecure'],
         'routes': [
             {
-                'match': f'Host(`{component_config.service.domain_name}`)',
                 'kind': 'Rule',
+                # assembly match for hostname <app>.<subdomain>:
+                'match': p.Output.concat('Host(`', app_name, '.', sub_domain, '`)'),
                 'services': [
                     {
                         'name': service.metadata.name,
@@ -209,25 +209,26 @@ ingress = k8s.apiextensions.CustomResource(
                 ],
             }
         ],
-        'tls': {'secretName': certificate.spec['secretName']},  # pyright: ignore[reportAttributeAccessIssue]
+        # use default wildcard certificate:
+        'tls': {},
     },
     opts=k8s_opts,
 )
 
 # ipv4 = service.status.load_balancer.ingress[0].ip
 # TODO take from kubernetes or even set up whitelist dns entry right there:
-ipv4 = '10.0.10.116'
+# ipv4 = '10.0.10.116'
 # p.export('ipv4', ipv4)
 
-dns_provider = unify.UnifyDnsRecordProvider(
-    base_url=str(component_config.unify.url),
-    api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
-    verify_ssl=component_config.unify.verify_ssl,
-)
+# dns_provider = unify.UnifyDnsRecordProvider(
+#     base_url=str(component_config.unify.url),
+#     api_token=os.environ['UNIFY_API_TOKEN__PULUMI'],
+#     verify_ssl=component_config.unify.verify_ssl,
+# )
 
-unify.UnifyDnsRecord(
-    'dns',
-    domain_name=component_config.service.domain_name,
-    ipv4=ipv4,
-    provider=dns_provider,
-)
+# unify.UnifyDnsRecord(
+#     'dns',
+#     domain_name='*.dev.mpagel.de',
+#     ipv4=ipv4,
+#     provider=dns_provider,
+# )

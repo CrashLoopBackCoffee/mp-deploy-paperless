@@ -3,16 +3,10 @@ name = "paperless"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "httpx>=0.28.1",
-    "mp-deploy-utils",
     "pulumi>=3.147.0",
     "pulumi-kubernetes>=4.21.0",
     "pydantic>=2.10.1",
 ]
-
-[tool.uv.sources]
-mp-deploy-utils = { path = "../deploy-utils", editable = true }
-
 
 [dependency-groups]
 dev=[
