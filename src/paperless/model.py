@@ -23,5 +23,14 @@ class EnvVarRef(ConfigBaseModel):
         return p.Output.secret(os.environ[self.envvar])
 
 
-class ComponentConfig(ConfigBaseModel):
+class PaperlessConfig(ConfigBaseModel):
     pass
+
+
+class ServiceConfig(ConfigBaseModel):
+    domain_name: str
+
+
+class ComponentConfig(ConfigBaseModel):
+    service: ServiceConfig
+    paperless: PaperlessConfig
