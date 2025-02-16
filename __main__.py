@@ -28,27 +28,6 @@ namespaced_provider = k8s.Provider(
 )
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
-nginx_config = k8s.core.v1.ConfigMap(
-    'nginx-config',
-    data={
-        'nginx.conf': """
-            events {}
-            http {
-                server {
-                    listen 443 ssl;
-                    ssl_certificate /etc/nginx/ssl/tls.crt;
-                    ssl_certificate_key /etc/nginx/ssl/tls.key;
-                    location / {
-                        root /usr/share/nginx/html;
-                        index index.html;
-                    }
-                }
-            }
-        """,
-    },
-    opts=k8s_opts,
-)
-
 deployment = k8s.apps.v1.Deployment(
     'nginx',
     metadata={'name': 'nginx'},
@@ -113,7 +92,6 @@ ingress = k8s.apiextensions.CustomResource(
         'routes': [
             {
                 'kind': 'Rule',
-                # assembly match for hostname <app>.<subdomain>:
                 'match': p.Output.concat('Host(`', fqdn, '`)'),
                 'services': [
                     {
