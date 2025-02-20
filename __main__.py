@@ -13,7 +13,7 @@ kube_config = k8s_stack.get_output('kube-config')
 k8s_provider = k8s.Provider('k8s', kubeconfig=kube_config)
 k8s_opts = p.ResourceOptions(provider=k8s_provider)
 
-labels = {'app': 'nginx'}
+labels = {'app': 'paperless'}
 
 ns = k8s.core.v1.Namespace(
     'paperless',
@@ -28,9 +28,11 @@ namespaced_provider = k8s.Provider(
 )
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
+REDIS_PORT = 6379
+
 deployment = k8s.apps.v1.Deployment(
-    'nginx',
-    metadata={'name': 'nginx'},
+    'paperless',
+    metadata={'name': 'paperless'},
     spec={
         'replicas': 1,
         'selector': {
@@ -43,15 +45,28 @@ deployment = k8s.apps.v1.Deployment(
             'spec': {
                 'containers': [
                     {
-                        'image': 'nginx',
-                        'name': 'nginx',
+                        'name': 'broker',
+                        'image': 'docker.io/library/redis:7',
+                        'ports': [
+                            {
+                                'name': 'redis',
+                                'container_port': REDIS_PORT,
+                            },
+                        ],
+                    },
+                    {
+                        'name': 'webserver',
+                        'image': 'ghcr.io/paperless-ngx/paperless-ngx:latest',
                         'ports': [
                             {
                                 'name': 'http',
-                                'container_port': 80,
+                                'container_port': 8000,
                             },
                         ],
-                    }
+                        'env': [
+                            {'name': 'PAPERLESS_REDIS', 'value': f'redis://localhost:{REDIS_PORT}'},
+                        ],
+                    },
                 ],
             },
         },
@@ -60,9 +75,9 @@ deployment = k8s.apps.v1.Deployment(
 )
 
 service = k8s.core.v1.Service(
-    'nginx',
+    'paperless',
     metadata={
-        'name': 'nginx',
+        'name': 'paperless',
     },
     spec={
         'selector': deployment.spec.selector.match_labels,
