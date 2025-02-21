@@ -30,6 +30,9 @@ k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
 REDIS_PORT = 6379
 
+fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
+p.export('fqdn', fqdn)
+
 deployment = k8s.apps.v1.Deployment(
     'paperless',
     metadata={'name': 'paperless'},
@@ -64,7 +67,14 @@ deployment = k8s.apps.v1.Deployment(
                             },
                         ],
                         'env': [
-                            {'name': 'PAPERLESS_REDIS', 'value': f'redis://localhost:{REDIS_PORT}'},
+                            {
+                                'name': 'PAPERLESS_REDIS',
+                                'value': f'redis://localhost:{REDIS_PORT}',
+                            },
+                            {
+                                'name': 'PAPERLESS_URL',
+                                'value': p.Output.concat('https://', fqdn),
+                            },
                         ],
                     },
                 ],
@@ -92,8 +102,6 @@ service = k8s.core.v1.Service(
     opts=k8s_opts,
 )
 
-fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
-p.export('fqdn', fqdn)
 
 ingress = k8s.apiextensions.CustomResource(
     'ingress',
