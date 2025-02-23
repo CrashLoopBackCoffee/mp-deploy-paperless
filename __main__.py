@@ -33,6 +33,32 @@ REDIS_PORT = 6379
 fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
 p.export('fqdn', fqdn)
 
+data_pvc = k8s.core.v1.PersistentVolumeClaim(
+    'data',
+    metadata={
+        'name': 'data',
+    },
+    spec={
+        'storage_class_name': 'data-hostpath-retained',
+        'access_modes': ['ReadWriteOnce'],
+        'resources': {'requests': {'storage': '1Gi'}},
+    },
+    opts=k8s_opts,
+)
+
+media_pvc = k8s.core.v1.PersistentVolumeClaim(
+    'media',
+    metadata={
+        'name': 'media',
+    },
+    spec={
+        'storage_class_name': 'data-hostpath-retained',
+        'access_modes': ['ReadWriteOnce'],
+        'resources': {'requests': {'storage': '4Gi'}},
+    },
+    opts=k8s_opts,
+)
+
 deployment = k8s.apps.v1.Deployment(
     'paperless',
     metadata={'name': 'paperless'},
@@ -60,6 +86,16 @@ deployment = k8s.apps.v1.Deployment(
                     {
                         'name': 'webserver',
                         'image': 'ghcr.io/paperless-ngx/paperless-ngx:latest',
+                        'volume_mounts': [
+                            {
+                                'name': 'data',
+                                'mount_path': '/usr/src/paperless/data',
+                            },
+                            {
+                                'name': 'media',
+                                'mount_path': '/usr/src/paperless/media',
+                            },
+                        ],
                         'ports': [
                             {
                                 'name': 'http',
@@ -76,6 +112,20 @@ deployment = k8s.apps.v1.Deployment(
                                 'value': p.Output.concat('https://', fqdn),
                             },
                         ],
+                    },
+                ],
+                'volumes': [
+                    {
+                        'name': 'data',
+                        'persistent_volume_claim': {
+                            'claim_name': data_pvc.metadata.name,
+                        },
+                    },
+                    {
+                        'name': 'media',
+                        'persistent_volume_claim': {
+                            'claim_name': media_pvc.metadata.name,
+                        },
                     },
                 ],
             },
