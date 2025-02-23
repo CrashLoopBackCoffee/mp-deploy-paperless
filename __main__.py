@@ -13,7 +13,7 @@ kube_config = k8s_stack.get_output('kube-config')
 k8s_provider = k8s.Provider('k8s', kubeconfig=kube_config)
 k8s_opts = p.ResourceOptions(provider=k8s_provider)
 
-labels = {'app': 'nginx'}
+labels = {'app': 'paperless'}
 
 ns = k8s.core.v1.Namespace(
     'paperless',
@@ -28,9 +28,40 @@ namespaced_provider = k8s.Provider(
 )
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
+REDIS_PORT = 6379
+
+fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
+p.export('fqdn', fqdn)
+
+data_pvc = k8s.core.v1.PersistentVolumeClaim(
+    'data',
+    metadata={
+        'name': 'data',
+    },
+    spec={
+        'storage_class_name': 'data-hostpath-retained',
+        'access_modes': ['ReadWriteOnce'],
+        'resources': {'requests': {'storage': '1Gi'}},
+    },
+    opts=k8s_opts,
+)
+
+media_pvc = k8s.core.v1.PersistentVolumeClaim(
+    'media',
+    metadata={
+        'name': 'media',
+    },
+    spec={
+        'storage_class_name': 'data-hostpath-retained',
+        'access_modes': ['ReadWriteOnce'],
+        'resources': {'requests': {'storage': '4Gi'}},
+    },
+    opts=k8s_opts,
+)
+
 deployment = k8s.apps.v1.Deployment(
-    'nginx',
-    metadata={'name': 'nginx'},
+    'paperless',
+    metadata={'name': 'paperless'},
     spec={
         'replicas': 1,
         'selector': {
@@ -43,15 +74,59 @@ deployment = k8s.apps.v1.Deployment(
             'spec': {
                 'containers': [
                     {
-                        'image': 'nginx',
-                        'name': 'nginx',
+                        'name': 'broker',
+                        'image': 'docker.io/library/redis:7',
+                        'ports': [
+                            {
+                                'name': 'redis',
+                                'container_port': REDIS_PORT,
+                            },
+                        ],
+                    },
+                    {
+                        'name': 'webserver',
+                        'image': 'ghcr.io/paperless-ngx/paperless-ngx:latest',
+                        'volume_mounts': [
+                            {
+                                'name': 'data',
+                                'mount_path': '/usr/src/paperless/data',
+                            },
+                            {
+                                'name': 'media',
+                                'mount_path': '/usr/src/paperless/media',
+                            },
+                        ],
                         'ports': [
                             {
                                 'name': 'http',
-                                'container_port': 80,
+                                'container_port': 8000,
                             },
                         ],
-                    }
+                        'env': [
+                            {
+                                'name': 'PAPERLESS_REDIS',
+                                'value': f'redis://localhost:{REDIS_PORT}',
+                            },
+                            {
+                                'name': 'PAPERLESS_URL',
+                                'value': p.Output.concat('https://', fqdn),
+                            },
+                        ],
+                    },
+                ],
+                'volumes': [
+                    {
+                        'name': 'data',
+                        'persistent_volume_claim': {
+                            'claim_name': data_pvc.metadata.name,
+                        },
+                    },
+                    {
+                        'name': 'media',
+                        'persistent_volume_claim': {
+                            'claim_name': media_pvc.metadata.name,
+                        },
+                    },
                 ],
             },
         },
@@ -60,9 +135,9 @@ deployment = k8s.apps.v1.Deployment(
 )
 
 service = k8s.core.v1.Service(
-    'nginx',
+    'paperless',
     metadata={
-        'name': 'nginx',
+        'name': 'paperless',
     },
     spec={
         'selector': deployment.spec.selector.match_labels,
@@ -77,8 +152,6 @@ service = k8s.core.v1.Service(
     opts=k8s_opts,
 )
 
-fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
-p.export('fqdn', fqdn)
 
 ingress = k8s.apiextensions.CustomResource(
     'ingress',
