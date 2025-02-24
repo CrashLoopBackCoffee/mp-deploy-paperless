@@ -18,7 +18,12 @@ labels = {'app': 'paperless'}
 ns = k8s.core.v1.Namespace(
     'paperless',
     metadata={'name': 'paperless'},
-    opts=p.ResourceOptions(provider=k8s_provider),
+    opts=p.ResourceOptions.merge(
+        k8s_opts,
+        # protect namespace as the PVCs with the storage data are keeping track of the PVs,
+        # otherwise new PVs are created:
+        p.ResourceOptions(protect=True),
+    ),
 )
 
 namespaced_provider = k8s.Provider(
@@ -33,33 +38,7 @@ REDIS_PORT = 6379
 fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
 p.export('fqdn', fqdn)
 
-data_pvc = k8s.core.v1.PersistentVolumeClaim(
-    'data',
-    metadata={
-        'name': 'data',
-    },
-    spec={
-        'storage_class_name': 'data-hostpath-retained',
-        'access_modes': ['ReadWriteOnce'],
-        'resources': {'requests': {'storage': '1Gi'}},
-    },
-    opts=k8s_opts,
-)
-
-media_pvc = k8s.core.v1.PersistentVolumeClaim(
-    'media',
-    metadata={
-        'name': 'media',
-    },
-    spec={
-        'storage_class_name': 'data-hostpath-retained',
-        'access_modes': ['ReadWriteOnce'],
-        'resources': {'requests': {'storage': '4Gi'}},
-    },
-    opts=k8s_opts,
-)
-
-deployment = k8s.apps.v1.Deployment(
+sts = k8s.apps.v1.StatefulSet(
     'paperless',
     metadata={'name': 'paperless'},
     spec={
@@ -67,6 +46,8 @@ deployment = k8s.apps.v1.Deployment(
         'selector': {
             'match_labels': labels,
         },
+        # we omit a headless service since we don't need cluster-internal network name identity:
+        'service_name': '',
         'template': {
             'metadata': {
                 'labels': labels,
@@ -114,25 +95,34 @@ deployment = k8s.apps.v1.Deployment(
                         ],
                     },
                 ],
-                'volumes': [
-                    {
-                        'name': 'data',
-                        'persistent_volume_claim': {
-                            'claim_name': data_pvc.metadata.name,
-                        },
-                    },
-                    {
-                        'name': 'media',
-                        'persistent_volume_claim': {
-                            'claim_name': media_pvc.metadata.name,
-                        },
-                    },
-                ],
             },
         },
+        'volume_claim_templates': [
+            {
+                'metadata': {
+                    'name': 'data',
+                },
+                'spec': {
+                    'storage_class_name': 'data-hostpath-retained',
+                    'access_modes': ['ReadWriteOnce'],
+                    'resources': {'requests': {'storage': '1Gi'}},
+                },
+            },
+            {
+                'metadata': {
+                    'name': 'media',
+                },
+                'spec': {
+                    'storage_class_name': 'data-hostpath-retained',
+                    'access_modes': ['ReadWriteOnce'],
+                    'resources': {'requests': {'storage': '4Gi'}},
+                },
+            },
+        ],
     },
     opts=k8s_opts,
 )
+
 
 service = k8s.core.v1.Service(
     'paperless',
@@ -140,7 +130,7 @@ service = k8s.core.v1.Service(
         'name': 'paperless',
     },
     spec={
-        'selector': deployment.spec.selector.match_labels,
+        'selector': sts.spec.selector.match_labels,
         'ports': [
             {
                 'name': 'http',
