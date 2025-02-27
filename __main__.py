@@ -2,6 +2,7 @@
 
 import pulumi as p
 import pulumi_kubernetes as k8s
+import pulumi_random as random
 
 from paperless.model import ComponentConfig
 
@@ -34,9 +35,49 @@ namespaced_provider = k8s.Provider(
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
 REDIS_PORT = 6379
+PAPERLESS_PORT = 8000
 
 fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
 p.export('fqdn', fqdn)
+
+admin_username = 'admin'
+admin_password = random.RandomPassword('admin-password', length=64, special=False).result
+
+p.export('admin-username', admin_username)
+p.export('admin-password', admin_password)
+
+config = k8s.core.v1.ConfigMap(
+    'config',
+    metadata={
+        'name': 'config',
+    },
+    data={
+        'PAPERLESS_REDIS': f'redis://localhost:{REDIS_PORT}',
+        'PAPERLESS_URL': p.Output.concat('https://', fqdn),
+        # https://docs.paperless-ngx.com/troubleshooting/#gunicorn-fails-to-start-with-is-not-a-valid-port-number
+        'PAPERLESS_PORT': str(PAPERLESS_PORT),
+        'PAPERLESS_ADMIN_USER': admin_username,
+    },
+    opts=k8s_opts,
+)
+
+config_secret = k8s.core.v1.Secret(
+    'config-secret',
+    metadata={
+        'name': 'config-secret',
+    },
+    string_data={
+        'PAPERLESS_SECRET_KEY': random.RandomPassword(
+            'paperless-secret-key',
+            length=64,
+            special=False,
+        ).result,
+        'PAPERLESS_ADMIN_PASSWORD': admin_password,
+    },
+    type='Opaque',
+    opts=k8s_opts,
+)
+
 
 sts = k8s.apps.v1.StatefulSet(
     'paperless',
@@ -80,17 +121,19 @@ sts = k8s.apps.v1.StatefulSet(
                         'ports': [
                             {
                                 'name': 'http',
-                                'container_port': 8000,
+                                'container_port': PAPERLESS_PORT,
                             },
                         ],
-                        'env': [
+                        'env_from': [
                             {
-                                'name': 'PAPERLESS_REDIS',
-                                'value': f'redis://localhost:{REDIS_PORT}',
+                                'config_map_ref': {
+                                    'name': config.metadata.name,
+                                }
                             },
                             {
-                                'name': 'PAPERLESS_URL',
-                                'value': p.Output.concat('https://', fqdn),
+                                'secret_ref': {
+                                    'name': config_secret.metadata.name,
+                                }
                             },
                         ],
                     },
