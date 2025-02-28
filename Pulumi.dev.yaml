@@ -1,5 +1,8 @@
 config:
   paperless:config:
-    service:
-      domain-name: paperless.dev.mpagel.de
     paperless: {}
+    redis: {}
+    entraid:
+      client-id: de687424-284e-4aeb-b100-b7c6caa11346
+      client-secret:
+        secure: AAABAGBYb0tJN5qCTAaGNmIY1jq6++GjwBzo3ujuudHCPVt2KD0Y2g6L2SmsnuxYdPeF2IKFBHZklhOSKj/FoCq/xZD0MvHb

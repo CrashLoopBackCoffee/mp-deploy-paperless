@@ -24,13 +24,20 @@ class EnvVarRef(ConfigBaseModel):
 
 
 class PaperlessConfig(ConfigBaseModel):
-    pass
+    port: pydantic.PositiveInt = 8000
 
 
-class ServiceConfig(ConfigBaseModel):
-    domain_name: str
+class RedisConfig(ConfigBaseModel):
+    port: pydantic.PositiveInt = 6379
+
+
+class EntraIdConfig(ConfigBaseModel):
+    tenant_id: str = '19d0fb13-2d87-4699-9ae2-6e431148a6ae'
+    client_id: str
+    client_secret: str
 
 
 class ComponentConfig(ConfigBaseModel):
-    service: ServiceConfig
     paperless: PaperlessConfig
+    redis: RedisConfig
+    entraid: EntraIdConfig

@@ -2,6 +2,7 @@
 
 import pulumi as p
 import pulumi_kubernetes as k8s
+import pulumi_random as random
 
 from paperless.model import ComponentConfig
 
@@ -33,10 +34,84 @@ namespaced_provider = k8s.Provider(
 )
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
-REDIS_PORT = 6379
 
 fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
 p.export('fqdn', fqdn)
+
+admin_username = 'admin'
+admin_password = random.RandomPassword('admin-password', length=64, special=False).result
+
+p.export('admin-username', admin_username)
+p.export('admin-password', admin_password)
+
+config = k8s.core.v1.ConfigMap(
+    'config',
+    data={
+        'PAPERLESS_REDIS': f'redis://localhost:{component_config.redis.port}',
+        'PAPERLESS_URL': p.Output.concat('https://', fqdn),
+        'PAPERLESS_PORT': str(component_config.paperless.port),
+        'PAPERLESS_ADMIN_USER': admin_username,
+        'PAPERLESS_APPS': ','.join(('allauth.socialaccount.providers.openid_connect',)),
+        'PAPERLESS_ACCOUNT_EMAIL_VERIFICATION': 'none',
+        'PAPERLESS_OIDC_DEFAULT_GROUP': 'readers',
+    },
+    opts=k8s_opts,
+)
+
+config_secret = k8s.core.v1.Secret(
+    'config-secret',
+    string_data={
+        'PAPERLESS_SECRET_KEY': random.RandomPassword(
+            'paperless-secret-key',
+            length=64,
+            special=False,
+        ).result,
+        'PAPERLESS_ADMIN_PASSWORD': admin_password,
+        # Entra ID OIDC config contains client secret:
+        'PAPERLESS_SOCIALACCOUNT_PROVIDERS': p.Output.json_dumps(
+            {
+                'openid_connect': {
+                    'APPS': [
+                        {
+                            'provider_id': 'microsoft',
+                            'name': 'Microsoft Entra ID',
+                            'client_id': component_config.entraid.client_id,
+                            'secret': component_config.entraid.client_secret,
+                            'settings': {
+                                'server_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/v2.0',
+                                ),
+                                'authorization_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/oauth2/v2.0/authorize',
+                                ),
+                                'access_token_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/oauth2/v2.0/token',
+                                ),
+                                'userinfo_url': 'https://graph.microsoft.com/oidc/userinfo',
+                                'jwks_uri': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/discovery/v2.0/keys',
+                                ),
+                                'scope': ['openid', 'email', 'profile'],
+                                'extra_data': ['email', 'name', 'preferred_username'],
+                            },
+                        }
+                    ]
+                }
+            }
+        ),
+    },
+    type='Opaque',
+    opts=k8s_opts,
+)
+
 
 sts = k8s.apps.v1.StatefulSet(
     'paperless',
@@ -60,7 +135,7 @@ sts = k8s.apps.v1.StatefulSet(
                         'ports': [
                             {
                                 'name': 'redis',
-                                'container_port': REDIS_PORT,
+                                'container_port': component_config.redis.port,
                             },
                         ],
                     },
@@ -80,17 +155,19 @@ sts = k8s.apps.v1.StatefulSet(
                         'ports': [
                             {
                                 'name': 'http',
-                                'container_port': 8000,
+                                'container_port': component_config.paperless.port,
                             },
                         ],
-                        'env': [
+                        'env_from': [
                             {
-                                'name': 'PAPERLESS_REDIS',
-                                'value': f'redis://localhost:{REDIS_PORT}',
+                                'config_map_ref': {
+                                    'name': config.metadata.name,
+                                }
                             },
                             {
-                                'name': 'PAPERLESS_URL',
-                                'value': p.Output.concat('https://', fqdn),
+                                'secret_ref': {
+                                    'name': config_secret.metadata.name,
+                                }
                             },
                         ],
                     },
