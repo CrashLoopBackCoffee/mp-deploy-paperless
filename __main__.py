@@ -34,8 +34,6 @@ namespaced_provider = k8s.Provider(
 )
 k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
-REDIS_PORT = 6379
-PAPERLESS_PORT = 8000
 
 fqdn = p.Output.concat(p.get_project(), '.', k8s_stack.get_output('app-sub-domain'))
 p.export('fqdn', fqdn)
@@ -52,11 +50,13 @@ config = k8s.core.v1.ConfigMap(
         'name': 'config',
     },
     data={
-        'PAPERLESS_REDIS': f'redis://localhost:{REDIS_PORT}',
+        'PAPERLESS_REDIS': f'redis://localhost:{component_config.redis.port}',
         'PAPERLESS_URL': p.Output.concat('https://', fqdn),
-        # https://docs.paperless-ngx.com/troubleshooting/#gunicorn-fails-to-start-with-is-not-a-valid-port-number
-        'PAPERLESS_PORT': str(PAPERLESS_PORT),
+        'PAPERLESS_PORT': str(component_config.paperless.port),
         'PAPERLESS_ADMIN_USER': admin_username,
+        'PAPERLESS_APPS': ','.join(('allauth.socialaccount.providers.openid_connect',)),
+        'PAPERLESS_ACCOUNT_EMAIL_VERIFICATION': 'none',
+        'PAPERLESS_OIDC_DEFAULT_GROUP': 'readers',
     },
     opts=k8s_opts,
 )
@@ -73,6 +73,46 @@ config_secret = k8s.core.v1.Secret(
             special=False,
         ).result,
         'PAPERLESS_ADMIN_PASSWORD': admin_password,
+        # Entra ID OIDC config contains client secret:
+        'PAPERLESS_SOCIALACCOUNT_PROVIDERS': p.Output.json_dumps(
+            {
+                'openid_connect': {
+                    'APPS': [
+                        {
+                            'provider_id': 'microsoft',
+                            'name': 'Microsoft Entra ID',
+                            'client_id': component_config.entraid.client_id,
+                            'secret': component_config.entraid.client_secret,
+                            'settings': {
+                                'server_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/v2.0',
+                                ),
+                                'authorization_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/oauth2/v2.0/authorize',
+                                ),
+                                'access_token_url': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/oauth2/v2.0/token',
+                                ),
+                                'userinfo_url': 'https://graph.microsoft.com/oidc/userinfo',
+                                'jwks_uri': p.Output.concat(
+                                    'https://login.microsoftonline.com/',
+                                    component_config.entraid.tenant_id,
+                                    '/discovery/v2.0/keys',
+                                ),
+                                'scope': ['openid', 'email', 'profile'],
+                                'extra_data': ['email', 'name', 'preferred_username'],
+                            },
+                        }
+                    ]
+                }
+            }
+        ),
     },
     type='Opaque',
     opts=k8s_opts,
@@ -101,7 +141,7 @@ sts = k8s.apps.v1.StatefulSet(
                         'ports': [
                             {
                                 'name': 'redis',
-                                'container_port': REDIS_PORT,
+                                'container_port': component_config.redis.port,
                             },
                         ],
                     },
@@ -121,7 +161,7 @@ sts = k8s.apps.v1.StatefulSet(
                         'ports': [
                             {
                                 'name': 'http',
-                                'container_port': PAPERLESS_PORT,
+                                'container_port': component_config.paperless.port,
                             },
                         ],
                         'env_from': [
