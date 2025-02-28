@@ -46,9 +46,6 @@ p.export('admin-password', admin_password)
 
 config = k8s.core.v1.ConfigMap(
     'config',
-    metadata={
-        'name': 'config',
-    },
     data={
         'PAPERLESS_REDIS': f'redis://localhost:{component_config.redis.port}',
         'PAPERLESS_URL': p.Output.concat('https://', fqdn),
@@ -63,9 +60,6 @@ config = k8s.core.v1.ConfigMap(
 
 config_secret = k8s.core.v1.Secret(
     'config-secret',
-    metadata={
-        'name': 'config-secret',
-    },
     string_data={
         'PAPERLESS_SECRET_KEY': random.RandomPassword(
             'paperless-secret-key',
