@@ -1,7 +1,13 @@
 config:
   paperless:config:
-    paperless: {}
-    redis: {}
+    paperless:
+      # renovate: datasource=github-releases packageName=paperless-ngx/paperless-ngx versioning=semver
+      version: "2.14.6"
+      data-size-gb: 1
+      media-size-gb: 4
+    redis:
+      # renovate: datasource=github-releases packageName=redis/redis versioning=semver
+      version: "7.2.7"
     entraid:
       client-id: de687424-284e-4aeb-b100-b7c6caa11346
       client-secret:

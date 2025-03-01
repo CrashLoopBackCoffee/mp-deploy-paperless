@@ -14,12 +14,12 @@ def create_paperless(
 ):
     k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
-    config, config_secret = create_environment(component_config, fqdn, k8s_opts)
-    paperless_sts = create_app(component_config, config, config_secret, k8s_opts)
-    expose_app(fqdn, paperless_sts, k8s_opts)
+    config, config_secret = configure(component_config, fqdn, k8s_opts)
+    paperless_sts = deploy(component_config, config, config_secret, k8s_opts)
+    expose(fqdn, paperless_sts, k8s_opts)
 
 
-def create_environment(
+def configure(
     component_config: ComponentConfig,
     fqdn: p.Input[str],
     k8s_opts: p.ResourceOptions,
@@ -101,7 +101,7 @@ def create_environment(
     return config, config_secret
 
 
-def create_app(
+def deploy(
     component_config: ComponentConfig,
     config: k8s.core.v1.ConfigMap,
     config_secret: k8s.core.v1.Secret,
@@ -125,7 +125,7 @@ def create_app(
                     'containers': [
                         {
                             'name': 'broker',
-                            'image': 'docker.io/library/redis:7',
+                            'image': f'docker.io/library/redis:{component_config.redis.version}',
                             'ports': [
                                 {
                                     'name': 'redis',
@@ -135,7 +135,7 @@ def create_app(
                         },
                         {
                             'name': 'webserver',
-                            'image': 'ghcr.io/paperless-ngx/paperless-ngx:latest',
+                            'image': f'ghcr.io/paperless-ngx/paperless-ngx:{component_config.paperless.version}',
                             'volume_mounts': [
                                 {
                                     'name': 'data',
@@ -176,7 +176,9 @@ def create_app(
                     'spec': {
                         'storage_class_name': 'data-hostpath-retained',
                         'access_modes': ['ReadWriteOnce'],
-                        'resources': {'requests': {'storage': '1Gi'}},
+                        'resources': {
+                            'requests': {'storage': f'{component_config.paperless.data_size_gb}Gi'}
+                        },
                     },
                 },
                 {
@@ -186,7 +188,9 @@ def create_app(
                     'spec': {
                         'storage_class_name': 'data-hostpath-retained',
                         'access_modes': ['ReadWriteOnce'],
-                        'resources': {'requests': {'storage': '4Gi'}},
+                        'resources': {
+                            'requests': {'storage': f'{component_config.paperless.media_size_gb}Gi'}
+                        },
                     },
                 },
             ],
@@ -195,7 +199,7 @@ def create_app(
     )
 
 
-def expose_app(fqdn, paperless_sts, k8s_opts):
+def expose(fqdn, paperless_sts, k8s_opts):
     service = k8s.core.v1.Service(
         'paperless',
         metadata={
