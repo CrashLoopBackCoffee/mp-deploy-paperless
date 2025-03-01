@@ -7,7 +7,7 @@ config:
       media-size-gb: 4
     redis:
       # renovate: datasource=github-releases packageName=redis/redis versioning=semver
-      version: 7.2.7
+      version: 7.4.2
     entraid:
       client-id: de687424-284e-4aeb-b100-b7c6caa11346
       client-secret:
