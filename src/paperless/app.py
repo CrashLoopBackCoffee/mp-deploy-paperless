@@ -125,7 +125,7 @@ def deploy(
                     'containers': [
                         {
                             'name': 'broker',
-                            'image': 'docker.io/library/redis:7',
+                            'image': f'docker.io/library/redis:{component_config.redis.version}',
                             'ports': [
                                 {
                                     'name': 'redis',
@@ -135,7 +135,7 @@ def deploy(
                         },
                         {
                             'name': 'webserver',
-                            'image': 'ghcr.io/paperless-ngx/paperless-ngx:latest',
+                            'image': f'ghcr.io/paperless-ngx/paperless-ngx:{component_config.paperless.version}',
                             'volume_mounts': [
                                 {
                                     'name': 'data',
@@ -176,7 +176,9 @@ def deploy(
                     'spec': {
                         'storage_class_name': 'data-hostpath-retained',
                         'access_modes': ['ReadWriteOnce'],
-                        'resources': {'requests': {'storage': '1Gi'}},
+                        'resources': {
+                            'requests': {'storage': f'{component_config.paperless.data_size_gb}Gi'}
+                        },
                     },
                 },
                 {
@@ -186,7 +188,9 @@ def deploy(
                     'spec': {
                         'storage_class_name': 'data-hostpath-retained',
                         'access_modes': ['ReadWriteOnce'],
-                        'resources': {'requests': {'storage': '4Gi'}},
+                        'resources': {
+                            'requests': {'storage': f'{component_config.paperless.media_size_gb}Gi'}
+                        },
                     },
                 },
             ],

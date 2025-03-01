@@ -24,10 +24,14 @@ class EnvVarRef(ConfigBaseModel):
 
 
 class PaperlessConfig(ConfigBaseModel):
+    version: str
     port: pydantic.PositiveInt = 8000
+    data_size_gb: pydantic.PositiveInt
+    media_size_gb: pydantic.PositiveInt
 
 
 class RedisConfig(ConfigBaseModel):
+    version: str
     port: pydantic.PositiveInt = 6379
 
 
