@@ -124,16 +124,6 @@ def deploy(
                 'spec': {
                     'containers': [
                         {
-                            'name': 'broker',
-                            'image': f'docker.io/library/redis:{component_config.redis.version}',
-                            'ports': [
-                                {
-                                    'name': 'redis',
-                                    'container_port': component_config.redis.port,
-                                },
-                            ],
-                        },
-                        {
                             'name': 'webserver',
                             'image': f'ghcr.io/paperless-ngx/paperless-ngx:{component_config.paperless.version}',
                             'volume_mounts': [
@@ -162,6 +152,16 @@ def deploy(
                                     'secret_ref': {
                                         'name': config_secret.metadata.name,
                                     }
+                                },
+                            ],
+                        },
+                        {
+                            'name': 'broker',
+                            'image': f'docker.io/library/redis:{component_config.redis.version}',
+                            'ports': [
+                                {
+                                    'name': 'redis',
+                                    'container_port': component_config.redis.port,
                                 },
                             ],
                         },
