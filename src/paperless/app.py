@@ -14,12 +14,12 @@ def create_paperless(
 ):
     k8s_opts = p.ResourceOptions(provider=namespaced_provider)
 
-    config, config_secret = create_environment(component_config, fqdn, k8s_opts)
-    paperless_sts = create_app(component_config, config, config_secret, k8s_opts)
-    expose_app(fqdn, paperless_sts, k8s_opts)
+    config, config_secret = configure(component_config, fqdn, k8s_opts)
+    paperless_sts = deploy(component_config, config, config_secret, k8s_opts)
+    expose(fqdn, paperless_sts, k8s_opts)
 
 
-def create_environment(
+def configure(
     component_config: ComponentConfig,
     fqdn: p.Input[str],
     k8s_opts: p.ResourceOptions,
@@ -101,7 +101,7 @@ def create_environment(
     return config, config_secret
 
 
-def create_app(
+def deploy(
     component_config: ComponentConfig,
     config: k8s.core.v1.ConfigMap,
     config_secret: k8s.core.v1.Secret,
@@ -195,7 +195,7 @@ def create_app(
     )
 
 
-def expose_app(fqdn, paperless_sts, k8s_opts):
+def expose(fqdn, paperless_sts, k8s_opts):
     service = k8s.core.v1.Service(
         'paperless',
         metadata={
