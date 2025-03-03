@@ -12,3 +12,6 @@ config:
       client-id: de687424-284e-4aeb-b100-b7c6caa11346
       client-secret:
         secure: AAABAGBYb0tJN5qCTAaGNmIY1jq6++GjwBzo3ujuudHCPVt2KD0Y2g6L2SmsnuxYdPeF2IKFBHZklhOSKj/FoCq/xZD0MvHb
+    samba:
+      # ignorerenovate: datasource=github-releases packageName=dockur/samba versioning=semver
+      version: 4.21.4

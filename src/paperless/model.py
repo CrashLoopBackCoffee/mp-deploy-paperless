@@ -41,7 +41,12 @@ class EntraIdConfig(ConfigBaseModel):
     client_secret: str
 
 
+class SambaConfig(ConfigBaseModel):
+    version: str
+
+
 class ComponentConfig(ConfigBaseModel):
     paperless: PaperlessConfig
     redis: RedisConfig
     entraid: EntraIdConfig
+    samba: SambaConfig
