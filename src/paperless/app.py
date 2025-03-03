@@ -38,6 +38,7 @@ def configure(
             'PAPERLESS_PORT': str(component_config.paperless.port),
             'PAPERLESS_ADMIN_USER': admin_username,
             'PAPERLESS_APPS': ','.join(('allauth.socialaccount.providers.openid_connect',)),
+            'PAPERLESS_CONSUMER_POLLING': '30',
             'PAPERLESS_ACCOUNT_EMAIL_VERIFICATION': 'none',
             'PAPERLESS_OIDC_DEFAULT_GROUP': 'readers',
         },
@@ -107,6 +108,41 @@ def deploy(
     config_secret: k8s.core.v1.Secret,
     k8s_opts: p.ResourceOptions,
 ):
+    smb_secret = k8s.core.v1.Secret(
+        'smb-secret',
+        string_data={
+            'username': component_config.paperless.consume_smb.username.value,
+            'password': component_config.paperless.consume_smb.password.value,
+        },
+        opts=k8s_opts,
+    )
+
+    smb_storage_class = k8s.storage.v1.StorageClass(
+        'smb',
+        metadata={
+            'name': 'smb',
+        },
+        provisioner='smb.csi.k8s.io',
+        parameters={
+            'source': component_config.paperless.consume_smb.path,
+            # if csi.storage.k8s.io/provisioner-secret is provided, will create a sub directory
+            # with PV name under source
+            'csi.storage.k8s.io/provisioner-secret-name': smb_secret.metadata.name,
+            'csi.storage.k8s.io/provisioner-secret-namespace': smb_secret.metadata.namespace,
+            'csi.storage.k8s.io/node-stage-secret-name': smb_secret.metadata.name,
+            'csi.storage.k8s.io/node-stage-secret-namespace': smb_secret.metadata.namespace,
+        },
+        reclaim_policy='Delete',
+        volume_binding_mode='Immediate',
+        mount_options=[
+            'dir_mode=0777',
+            'file_mode=0777',
+            'uid=1000',
+            'gid=1000',
+        ],
+        opts=k8s_opts,
+    )
+
     return k8s.apps.v1.StatefulSet(
         'paperless',
         metadata={'name': 'paperless'},
@@ -124,16 +160,6 @@ def deploy(
                 'spec': {
                     'containers': [
                         {
-                            'name': 'broker',
-                            'image': f'docker.io/library/redis:{component_config.redis.version}',
-                            'ports': [
-                                {
-                                    'name': 'redis',
-                                    'container_port': component_config.redis.port,
-                                },
-                            ],
-                        },
-                        {
                             'name': 'webserver',
                             'image': f'ghcr.io/paperless-ngx/paperless-ngx:{component_config.paperless.version}',
                             'volume_mounts': [
@@ -144,6 +170,10 @@ def deploy(
                                 {
                                     'name': 'media',
                                     'mount_path': '/usr/src/paperless/media',
+                                },
+                                {
+                                    'name': 'consume',
+                                    'mount_path': '/usr/src/paperless/consume',
                                 },
                             ],
                             'ports': [
@@ -162,6 +192,16 @@ def deploy(
                                     'secret_ref': {
                                         'name': config_secret.metadata.name,
                                     }
+                                },
+                            ],
+                        },
+                        {
+                            'name': 'broker',
+                            'image': f'docker.io/library/redis:{component_config.redis.version}',
+                            'ports': [
+                                {
+                                    'name': 'redis',
+                                    'container_port': component_config.redis.port,
                                 },
                             ],
                         },
@@ -190,6 +230,20 @@ def deploy(
                         'access_modes': ['ReadWriteOnce'],
                         'resources': {
                             'requests': {'storage': f'{component_config.paperless.media_size_gb}Gi'}
+                        },
+                    },
+                },
+                {
+                    'metadata': {
+                        'name': 'consume',
+                    },
+                    'spec': {
+                        'storage_class_name': smb_storage_class.metadata.name,
+                        'access_modes': ['ReadWriteOnce'],
+                        'resources': {
+                            'requests': {
+                                'storage': f'{component_config.paperless.consume_size_mb}Mi'
+                            }
                         },
                     },
                 },
