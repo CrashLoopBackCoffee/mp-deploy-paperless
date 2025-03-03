@@ -23,11 +23,19 @@ class EnvVarRef(ConfigBaseModel):
         return p.Output.secret(os.environ[self.envvar])
 
 
+class SambaShareConfig(ConfigBaseModel):
+    path: str
+    username: EnvVarRef
+    password: EnvVarRef
+
+
 class PaperlessConfig(ConfigBaseModel):
     version: str
     port: pydantic.PositiveInt = 8000
     data_size_gb: pydantic.PositiveInt
     media_size_gb: pydantic.PositiveInt
+    consume_size_mb: pydantic.PositiveInt
+    consume_smb: SambaShareConfig
 
 
 class RedisConfig(ConfigBaseModel):
@@ -41,12 +49,7 @@ class EntraIdConfig(ConfigBaseModel):
     client_secret: str
 
 
-class SambaConfig(ConfigBaseModel):
-    version: str
-
-
 class ComponentConfig(ConfigBaseModel):
     paperless: PaperlessConfig
     redis: RedisConfig
     entraid: EntraIdConfig
-    samba: SambaConfig

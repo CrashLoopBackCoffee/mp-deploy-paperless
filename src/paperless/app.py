@@ -111,9 +111,8 @@ def deploy(
     smb_secret = k8s.core.v1.Secret(
         'smb-secret',
         string_data={
-            'username': 'otto',
-            'password': 'walkes',
-            #'mountOptions': 'dir_mode=0777,file_mode=0777,uid=0,gid=0,mfsymlinks',
+            'username': component_config.paperless.consume_smb.username.value,
+            'password': component_config.paperless.consume_smb.password.value,
         },
         opts=k8s_opts,
     )
@@ -125,7 +124,7 @@ def deploy(
         },
         provisioner='smb.csi.k8s.io',
         parameters={
-            'source': '//10.0.6.148/sharing',
+            'source': component_config.paperless.consume_smb.path,
             # if csi.storage.k8s.io/provisioner-secret is provided, will create a sub directory
             # with PV name under source
             'csi.storage.k8s.io/provisioner-secret-name': smb_secret.metadata.name,
@@ -242,7 +241,9 @@ def deploy(
                         'storage_class_name': smb_storage_class.metadata.name,
                         'access_modes': ['ReadWriteOnce'],
                         'resources': {
-                            'requests': {'storage': f'{component_config.paperless.media_size_gb}Gi'}
+                            'requests': {
+                                'storage': f'{component_config.paperless.consume_size_mb}Mi'
+                            }
                         },
                     },
                 },
