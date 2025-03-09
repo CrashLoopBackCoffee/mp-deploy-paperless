@@ -5,6 +5,7 @@ config:
       version: 2.14.7
       data-size-gb: 1
       media-size-gb: 4
+      consume-size-mb: 200
     redis:
       # renovate: datasource=github-releases packageName=redis/redis versioning=semver
       version: 7.4.2
