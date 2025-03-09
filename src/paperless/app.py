@@ -141,7 +141,7 @@ def deploy(
     samba_stack.get_output('smb-shares').apply(verify_share_names)
 
     consume_storage_class = _create_smb_storage_class(
-        'smb-consume',
+        component_config.paperless.consume_smb_share,
         samba_fqdn=samba_fqdn,
         share=component_config.paperless.consume_smb_share,
         reclaim_policy='Delete',
@@ -150,7 +150,7 @@ def deploy(
     )
 
     media_storage_class = _create_smb_storage_class(
-        'smb-media',
+        component_config.paperless.media_smb_share,
         samba_fqdn=samba_fqdn,
         share=component_config.paperless.media_smb_share,
         reclaim_policy='Retain',
