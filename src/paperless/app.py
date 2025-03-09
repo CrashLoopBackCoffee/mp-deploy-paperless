@@ -126,7 +126,6 @@ def deploy(
     )
 
     def verify_share_names(existing_shares):
-        print(existing_shares)
         if component_config.paperless.consume_smb_share not in existing_shares:
             raise UnresolvedSmbShareError(
                 'Consume share does not exist.',
