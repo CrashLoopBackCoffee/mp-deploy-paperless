@@ -22,7 +22,7 @@ ns = k8s.core.v1.Namespace(
         provider=k8s_provider,
         # protect namespace as the PVCs with the storage data are keeping track of the PVs,
         # otherwise new PVs are created:
-        protect=True,
+        protect=p.get_stack() == 'prod',
     ),
 )
 

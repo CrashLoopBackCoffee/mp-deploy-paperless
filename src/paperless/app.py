@@ -7,6 +7,10 @@ from paperless.model import ComponentConfig
 LABELS = {'app': 'paperless'}
 
 
+class UnresolvedSmbShareError(Exception):
+    """The refereced share does not exist."""
+
+
 def create_paperless(
     component_config: ComponentConfig,
     fqdn: p.Input[str],
@@ -108,39 +112,51 @@ def deploy(
     config_secret: k8s.core.v1.Secret,
     k8s_opts: p.ResourceOptions,
 ):
+    # we use prod samba storage regardless of what kind of stack this currently is:
+    samba_stack = p.StackReference(f'{p.get_organization()}/samba/prod')
+    samba_fqdn = samba_stack.get_output('fqdn')
+
     smb_secret = k8s.core.v1.Secret(
         'smb-secret',
         string_data={
-            'username': component_config.paperless.consume_smb.username.value,
-            'password': component_config.paperless.consume_smb.password.value,
+            'username': samba_stack.get_output('smb-k8s-username'),
+            'password': samba_stack.get_output('smb-k8s-password'),
         },
         opts=k8s_opts,
     )
 
-    smb_storage_class = k8s.storage.v1.StorageClass(
-        'smb',
-        metadata={
-            'name': 'smb',
-        },
-        provisioner='smb.csi.k8s.io',
-        parameters={
-            'source': component_config.paperless.consume_smb.path,
-            # if csi.storage.k8s.io/provisioner-secret is provided, will create a sub directory
-            # with PV name under source
-            'csi.storage.k8s.io/provisioner-secret-name': smb_secret.metadata.name,
-            'csi.storage.k8s.io/provisioner-secret-namespace': smb_secret.metadata.namespace,
-            'csi.storage.k8s.io/node-stage-secret-name': smb_secret.metadata.name,
-            'csi.storage.k8s.io/node-stage-secret-namespace': smb_secret.metadata.namespace,
-        },
+    def verify_share_names(existing_shares):
+        print(existing_shares)
+        if component_config.paperless.consume_smb_share not in existing_shares:
+            raise UnresolvedSmbShareError(
+                'Consume share does not exist.',
+                component_config.paperless.consume_smb_share,
+            )
+
+        if component_config.paperless.media_smb_share not in existing_shares:
+            raise UnresolvedSmbShareError(
+                'Media share does not exist.',
+                component_config.paperless.media_smb_share,
+            )
+
+    samba_stack.get_output('smb-shares').apply(verify_share_names)
+
+    consume_storage_class = _create_smb_storage_class(
+        'smb-consume',
+        samba_fqdn=samba_fqdn,
+        share=component_config.paperless.consume_smb_share,
         reclaim_policy='Delete',
-        volume_binding_mode='Immediate',
-        mount_options=[
-            'dir_mode=0777',
-            'file_mode=0777',
-            'uid=1000',
-            'gid=1000',
-        ],
-        opts=k8s_opts,
+        smb_secret=smb_secret,
+        k8s_opts=k8s_opts,
+    )
+
+    media_storage_class = _create_smb_storage_class(
+        'smb-media',
+        samba_fqdn=samba_fqdn,
+        share=component_config.paperless.media_smb_share,
+        reclaim_policy='Retain',
+        smb_secret=smb_secret,
+        k8s_opts=k8s_opts,
     )
 
     return k8s.apps.v1.StatefulSet(
@@ -226,7 +242,7 @@ def deploy(
                         'name': 'media',
                     },
                     'spec': {
-                        'storage_class_name': 'data-hostpath-retained',
+                        'storage_class_name': media_storage_class.metadata.name,
                         'access_modes': ['ReadWriteOnce'],
                         'resources': {
                             'requests': {'storage': f'{component_config.paperless.media_size_gb}Gi'}
@@ -238,7 +254,7 @@ def deploy(
                         'name': 'consume',
                     },
                     'spec': {
-                        'storage_class_name': smb_storage_class.metadata.name,
+                        'storage_class_name': consume_storage_class.metadata.name,
                         'access_modes': ['ReadWriteOnce'],
                         'resources': {
                             'requests': {
@@ -249,6 +265,42 @@ def deploy(
                 },
             ],
         },
+        opts=k8s_opts,
+    )
+
+
+def _create_smb_storage_class(
+    name: str,
+    *,
+    samba_fqdn: p.Input[str],
+    share: str,
+    reclaim_policy: str,
+    smb_secret: k8s.core.v1.Secret,
+    k8s_opts: p.ResourceOptions,
+) -> k8s.storage.v1.StorageClass:
+    return k8s.storage.v1.StorageClass(
+        name,
+        metadata={
+            'name': name,
+        },
+        provisioner='smb.csi.k8s.io',
+        parameters={
+            'source': p.Output.concat('//', samba_fqdn, '/', share),
+            # if csi.storage.k8s.io/provisioner-secret is provided, will create a sub directory
+            # with PV name under source
+            'csi.storage.k8s.io/provisioner-secret-name': smb_secret.metadata.name,
+            'csi.storage.k8s.io/provisioner-secret-namespace': smb_secret.metadata.namespace,
+            'csi.storage.k8s.io/node-stage-secret-name': smb_secret.metadata.name,
+            'csi.storage.k8s.io/node-stage-secret-namespace': smb_secret.metadata.namespace,
+        },
+        reclaim_policy=reclaim_policy,
+        volume_binding_mode='Immediate',
+        mount_options=[
+            'uid=1000',
+            'gid=1000',
+            'file_mode=0664',
+            'dir_mode=0775',
+        ],
         opts=k8s_opts,
     )
 
