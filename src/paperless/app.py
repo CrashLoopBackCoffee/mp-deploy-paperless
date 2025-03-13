@@ -44,7 +44,7 @@ def configure(
             'PAPERLESS_APPS': ','.join(('allauth.socialaccount.providers.openid_connect',)),
             'PAPERLESS_CONSUMER_POLLING': '30',
             'PAPERLESS_ACCOUNT_EMAIL_VERIFICATION': 'none',
-            'PAPERLESS_OIDC_DEFAULT_GROUP': 'readers',
+            'PAPERLESS_CONSUMER_RECURSIVE': 'true',
         },
         opts=k8s_opts,
     )
