@@ -299,6 +299,7 @@ def _create_smb_storage_class(
             'gid=1000',
             'file_mode=0664',
             'dir_mode=0775',
+            'iocharset=utf8',
         ],
         opts=k8s_opts,
     )
